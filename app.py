@@ -11,7 +11,10 @@ from src.forecasting import build_series
 from src.forecast_prophet import prophet_fit_predict
 from src.insights import compute_forecast_insights, insights_to_text
 from src.rag_pipeline import RAGIndex, build_docs_from_outputs
-
+from src.knowledge_builder import (
+    make_schema_doc, make_top_entities_docs, make_recent_trend_doc, make_forecast_table_doc
+)
+from src.rag_pipeline import Doc
 
 # -----------------------------
 # Streamlit config
@@ -20,7 +23,7 @@ st.set_page_config(page_title="AI Sales Analytics", layout="wide")
 st.title("AI-Powered Sales Analytics System")
 
 st.sidebar.header("Navigation")
-page = st.sidebar.selectbox("Go to", ["Data Upload", "Data Preview", "Dashboards", "Forecast Results"])
+page = st.sidebar.selectbox("Go to", ["Data Upload", "Data Preview", "Dashboards", "Forecast Results", "Chatbot"])
 
 
 # -----------------------------
@@ -379,11 +382,82 @@ elif page == "Forecast Results":
     )
 
     if st.button("Build / Rebuild Knowledge Base"):
-        docs = build_docs_from_outputs(kpis_text, ins_text, forecast_table_text)
+        schema_doc = make_schema_doc(df)
+        trend_doc = make_recent_trend_doc(series)
+        top_docs = make_top_entities_docs(df)
+        forecast_doc = make_forecast_table_doc(future_plot_df)
+
+        docs = [
+                   Doc(text=kpis_text, meta={"type": "kpis"}),
+                   Doc(text=schema_doc, meta={"type": "schema"}),
+                   Doc(text=trend_doc, meta={"type": "trend"}),
+                   Doc(text=ins_text, meta={"type": "forecast_insights"}),
+                   Doc(text=forecast_doc, meta={"type": "forecast_values"}),
+               ] + [Doc(text=t, meta={"type": "top_entities"}) for t in top_docs]
+
         rag = RAGIndex()
         rag.build(docs)
         st.session_state["rag_index"] = rag
         st.success("Knowledge base built successfully (sentence-transformers + FAISS).")
-
+#this is fot the understanding of my scheme faiass score and transformers.
     if "rag_index" in st.session_state:
         st.info("Knowledge base is ready. Next step: Chatbot page using local LLM + retrieval.")
+
+# =========================================================
+# Page: CHATBOT
+# =========================================================
+elif page == "Chatbot":
+    st.subheader("AI Chatbot (RAG: FAISS + Embeddings)")
+
+    if "rag_index" not in st.session_state:
+        st.info("Build the Knowledge Base first from Forecast Results page.")
+        st.stop()
+
+    rag = st.session_state["rag_index"]
+
+    mode = st.selectbox("Answer mode", ["Template (Cloud-safe)", "Local Ollama (requires Ollama running)"])
+    top_k = st.slider("Top-k retrieved chunks", 2, 10, 5)
+
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+
+    # display history
+    for role, msg in st.session_state["chat_history"]:
+        with st.chat_message(role):
+            st.write(msg)
+
+    user_q = st.chat_input("Ask about sales trends, forecast, top categories/stores...")
+    if user_q:
+        st.session_state["chat_history"].append(("user", user_q))
+        with st.chat_message("user"):
+            st.write(user_q)
+
+        results = rag.search_with_scores(user_q, k=top_k)
+        context = "\n".join([doc.text for _, doc in results])
+
+        with st.expander("Retrieved context (debug)"):
+            for score, doc in results:
+                st.write(f"score={score:.3f} | type={doc.meta.get('type')}")
+                st.write(doc.text)
+
+        if mode.startswith("Template"):
+            from src.rag_answering import template_answer
+            answer = template_answer(user_q, context)
+        else:
+            from src.rag_answering import build_context_block
+            from src.llm_local import ollama_generate
+
+            prompt = (
+                "You are an analytics assistant. Answer ONLY using the context.\n"
+                "If context is insufficient, say you do not have enough data.\n\n"
+                f"Context:\n{build_context_block(results)}\n\n"
+                f"Question: {user_q}\nAnswer:"
+            )
+            try:
+                answer = ollama_generate(prompt)
+            except Exception as e:
+                answer = f"Ollama call failed ({e}). Use Template mode on Streamlit Cloud."
+
+        st.session_state["chat_history"].append(("assistant", answer))
+        with st.chat_message("assistant"):
+            st.write(answer)

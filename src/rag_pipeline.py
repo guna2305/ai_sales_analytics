@@ -36,17 +36,17 @@ class RAGIndex:
         self.index = faiss.IndexFlatIP(dim)
         self.index.add(vectors)
 
-    def search(self, query: str, k: int = 5) -> List[Doc]:
+    def search_with_scores(self, query: str, k: int = 5):
         if self.index is None or not self.docs:
             return []
         qv = self._embed([query])
-        _, idxs = self.index.search(qv, k)
-        out: List[Doc] = []
-        for i in idxs[0]:
+        scores, idxs = self.index.search(qv, k)
+        results = []
+        for score, i in zip(scores[0], idxs[0]):
             if i < 0:
                 continue
-            out.append(self.docs[int(i)])
-        return out
+            results.append((float(score), self.docs[int(i)]))
+        return results
 
 
 def build_docs_from_outputs(kpis_text: str, forecast_insights_text: str, forecast_table_text: str) -> List[Doc]:
