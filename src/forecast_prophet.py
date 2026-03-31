@@ -3,9 +3,6 @@ from prophet import Prophet
 
 
 def make_default_holidays(country: str = "US") -> pd.DataFrame:
-    """
-    Small built-in holiday calendar for retail-style forecasting.
-    """
     current_year = pd.Timestamp.today().year
     years = [current_year - 1, current_year, current_year + 1, current_year + 2]
 
@@ -31,11 +28,6 @@ def prepare_prophet_training_df(
     sales_col: str = "sales",
     regressors: list | None = None,
 ) -> pd.DataFrame:
-    """
-    Convert raw sales data into Prophet-ready aggregated dataframe.
-    Required output columns: ds, y
-    Optional regressor columns are aggregated too.
-    """
     regressors = regressors or []
 
     agg_map = {sales_col: "sum"}
@@ -67,14 +59,6 @@ def prophet_fit_predict(
     regressor_cols: list | None = None,
     holidays_df: pd.DataFrame | None = None,
 ):
-    """
-    Train Prophet using aggregated dataframe.
-
-    train_df must contain:
-    - ds
-    - y
-    - optional regressor columns
-    """
     regressor_cols = regressor_cols or []
 
     model = Prophet(
