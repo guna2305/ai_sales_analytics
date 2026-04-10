@@ -11,7 +11,7 @@ def ollama_generate(prompt: str, model: str = "llama3") -> str:
     }
 
     try:
-        r = requests.post(url, json=payload, timeout=120)
+        r = requests.post(url, json=payload, timeout=300)
         r.raise_for_status()
         return r.json().get("response", "").strip()
 
