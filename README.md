@@ -1,5 +1,6 @@
 
 LIVE LINK: https://aisalesanalytics.streamlit.app/
+
 AI- Powered sales analytics system
 
 An end-to-end intelligent sales analytics platform that enables businesses to upload sales datasets, explore insights through interactive dashboards, forecast future sales using machine learning, and query business insights using an AI-powered assistant.
